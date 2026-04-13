@@ -7,7 +7,7 @@ list of valid subject IDs, then downloads only those files.
 Also repairs the missing hypnograms for any PSG files already present.
 
 Run:
-    python 00_download_smart.py
+    python 00_download.py
 """
 
 import os

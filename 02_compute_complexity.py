@@ -5,7 +5,7 @@ Fixes: numpy 2.0 removed np.math — use stdlib math module instead.
 Also fixes: legacy pick_channels() warning → use inst.pick().
 
 Run:
-    python 02_compute_complexity_fixed.py
+    python 02_compute_complexity.py
 """
 
 import os

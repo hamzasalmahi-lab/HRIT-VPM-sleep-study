@@ -32,23 +32,23 @@ https://physionet.org/content/sleep-edfx/1.0.0/
 
 Raw EDF files are not included. Download them using:
 
-	python 00_download_smart.py
+	python 00_download.py
 
 ## How to reproduce
 
 	pip install mne numpy scipy matplotlib pandas wfdb
-	python 00_download_smart.py
+	python 00_download.py
 	python 01_preprocess.py
-	python 02_compute_complexity_fixed.py
+	python 02_compute_complexity.py
 	python 03_vpm_analysis.py
 	python 04_figures.py
 	python 05_write_results.py
 
 ## File structure
 
-	00_download_smart.py              data download
+	00_download.py                    data download
 	01_preprocess.py                  EDF loading and sleep staging
-	02_compute_complexity_fixed.py    aperiodic slope computation
+	02_compute_complexity.py          aperiodic slope computation
 	03_vpm_analysis.py                pre-registered VPM analysis
 	04_figures.py                     publication figures
 	05_write_results.py               auto-generate results text
