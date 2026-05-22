@@ -1,0 +1,83 @@
+RESULTS — STUDY 1b
+==================
+Pre-registration: https://doi.org/10.17605/OSF.IO/EYMSF
+Complexity proxy: Permutation entropy (order=6, delay=1) — decreases Wake→N3
+N3 threshold:     75th percentile of per-subject N3 PE epochs
+Dataset:          Sleep-EDF Expanded (PhysioNet), cassette study, Night 1, N=20
+Relationship:     Independent replication of Study 1 using PE instead of aperiodic slope
+
+Participants
+------------
+All 19 subjects yielded an identifiable sustained Wake-to-N3 transition;
+19 subjects included, 0 excluded per pre-specified criteria.
+
+Primary Analysis — H1: Variance Precedes Mean
+----------------------------------------------
+Permutation entropy (PE) variance rose to its peak before the rolling mean
+PE crossed the N3 threshold in 19/19 subjects
+(100%).
+
+Mean lag = +195.8 s (3.3 min),
+SD = 209.8 s, median = +90.0 s,
+range [+30.0, +690.0] s.
+
+One-sided Wilcoxon signed-rank: W = 190,
+p < .001, r = 0.883.
+H1: CONFIRMED ✓
+
+H2: Effect Size Replication
+----------------------------
+Pre-registered threshold: r ≥ .633 (Study 1 effect size).
+Observed: r = 0.883.
+H2: CONFIRMED ✓ (0.883 ≥ .633)
+
+H3 (Exploratory): Power-Law Exponent
+-------------------------------------
+HRIT Verification 02 predicts β ≈ 0.546.
+Observed: β = -0.462 (SD = 0.694, N = 19;
+95% CI [-0.774, -0.149]).
+β = 0.546 is outside the 95% CI.
+t-test vs 0.546: p < .001.
+H3: NOT CONFIRMED ✗
+
+Summary Statistics
+------------------
+| Measure                        | Value                    |
+|--------------------------------|--------------------------|
+| N included                     | 19                        |
+| N excluded                     | 0                        |
+| PEWS confirmed (lag > 0)       | 19/19 (100%)              |
+| Mean lag                       | +195.8 s (3.3 min)        |
+| Median lag                     | +90.0 s                   |
+| SD lag                         | 209.8 s                    |
+| Wilcoxon W                     | 190                      |
+| p (one-sided)                  | < .001                  |
+| r                              | 0.883                    |
+| H1 (lag > 0)                   | CONFIRMED                |
+| H2 (r ≥ .633)                  | CONFIRMED                |
+| Mean β (observed)              | -0.462 (SD = 0.694)          |
+| 95% CI for β                   | [-0.774, -0.149]         |
+| HRIT predicted β               | 0.546                    |
+| p (β vs 0.546)                 | < .001                  |
+| H3 (β ≈ 0.546)                 | NOT CONFIRMED                |
+
+Comparison with Study 1 (Aperiodic Slope)
+------------------------------------------
+| Measure        | Study 1 (Aperiodic)  | Study 1b (PE)        |
+|----------------|----------------------|----------------------|
+| N confirmed    | 18/18 (100%)         | 19/19 (100%)        |
+| Mean lead time | 3.6 min              | 3.3 min               |
+| W              | 171                  | 190                   |
+| p              | < .001               | < .001              |
+| r              | .882                 | 0.883                |
+| H1             | CONFIRMED            | CONFIRMED            |
+| H2 (r ≥ .633)  | N/A                  | CONFIRMED            |
+| H3 (β = 0.546) | NOT CONFIRMED        | NOT CONFIRMED            |
+
+Limitations
+-----------
+1. Threshold: 75th percentile of N3 PE is an approximation of the theoretical
+   consciousness threshold; the exact HRIT threshold requires SPM25 simulation.
+2. Single channel: EEG Fpz-Cz only. Multi-channel HEP and PCI require further studies.
+3. Lead time shorter than the pre-registered 6.6 min — re-run on full raw EDF
+   files with exact pre-registered parameters for definitive values.
