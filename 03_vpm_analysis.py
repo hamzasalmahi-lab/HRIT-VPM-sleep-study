@@ -1,32 +1,36 @@
 """
-HRIT VPM Study 1 — Step 3 (FIXED): Core VPM Analysis
-======================================================
+HRIT VPM Study 1 — Step 3 (PRE-REGISTERED): Core VPM Analysis
+==============================================================
 Pre-registration: https://doi.org/10.17605/OSF.IO/X5ZPU
+Date registered:  13 Apr 2026
 
-HRIT Prediction (H1):
-    In the window preceding the Wake→N3 EEG complexity threshold
-    crossing, rolling variance of the complexity proxy reaches its
-    maximum BEFORE the rolling mean crosses the N3 threshold.
-    Lag = t_cross_mean − t_peak_var > 0 (Wilcoxon, one-sided).
+COMPLEXITY MEASURE: Aperiodic 1/f slope (−β from log-log PSD, Welch method,
+    4-s windows, 50% overlap, 2–40 Hz, alpha-excluded 9–12 Hz)
+    Computed in 02_compute_complexity.py → 'aperiodic' column
+    Direction: INCREASES Wake→N3 (N3 > Wake — steeper 1/f during NREM)
 
-HRIT Prediction (H2, exploratory):
-    Variance ~ (z_c − z)^β with predicted β ≈ 0.546.
+N3 THRESHOLD (pre-registered Step 4):
+    25th percentile of that subject's own N3 aperiodic slopes
+    = lower bound of N3 = first level the rising mean enters N3 territory
 
-COMPLEXITY MEASURE: Permutation entropy (order=6, delay=1)
-    — decreases monotonically from Wake to N3 (Wake > N1 > N2 > N3)
-    — correct direction for the threshold-crossing logic below
+CROSSING DIRECTION (pre-registered Step 5):
+    t_cross_mean = first epoch where rolling mean EXCEEDS (>=) N3 threshold
+    Mean rises from Wake level and crosses upward into N3 territory
 
-THRESHOLD CONVENTION:
-    threshold = 75th percentile of N3 PE epochs (upper boundary of N3)
-    t_cross_mean = first epoch where rolling mean drops BELOW threshold
-    (mean falls from Wake level ~0.85 into N3 territory ~0.58)
-    lag > 0 ↔ variance peaked BEFORE mean crossed ↔ VPM confirmed
+LAG SIGN CONVENTION (pre-registered Step 6):
+    lag = t_cross_mean − t_peak_var
+    Positive lag → variance peaked BEFORE mean crossed → VPM confirmed ✓
 
-BUG FIXED (vs prior version):
-    Prior code used aperiodic slope, which INCREASES Wake→N3 in
-    Sleep-EDF (N3 > Wake). This inverted the threshold logic and
-    caused t_cross_mean to fire at the window start for every subject.
-    Permutation entropy correctly decreases Wake→N3.
+VPM PREDICTIONS:
+    H1 (primary):    lag > 0 (Wilcoxon one-sided, α = .05)
+    H2 (exploratory): variance power-law β ≈ 0.546
+
+HISTORICAL BUG (fixed in this version):
+    Original code used 75th percentile + <= threshold — both calibrated
+    for a DECREASING measure. For aperiodic slope (rising), this set the
+    threshold above nearly all window values, forcing t_cross_mean = −20
+    for 16/19 subjects and making the test meaningless.
+    Fixed: 25th pctile + >= direction, exactly matching the pre-registration.
 """
 
 import os
@@ -42,17 +46,18 @@ COMPLEXITY_DIR = 'complexity'
 RESULTS_DIR    = 'results'
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
-# ── Analysis parameters ───────────────────────────────────────────────────────
+# ── Pre-registered parameters (do not change) ─────────────────────────────────
 EPOCH_SEC      = 30
-WINDOW_EPOCHS  = 6     # rolling window: 6 × 30s = 3 min
-PRE_EPOCHS     = 20    # look-back window: 20 × 30s = 10 min before N3
-POST_EPOCHS    = 10    # look-ahead: 5 min after N3 onset
-STAGE_N3       = 3
-COMPLEXITY_COL = 'perm_entropy'   # ← FIXED: use PE, not aperiodic
+WINDOW_EPOCHS  = 6      # 6 × 30s = 3-minute rolling window (centred)
+PRE_EPOCHS     = 20     # 20 × 30s = 10-minute pre-transition look-back
+POST_EPOCHS    = 10     # 10 × 30s = 5-minute post-onset
+MIN_PRE_EPOCHS = 5      # exclusion criterion (pre-registered)
+MIN_N3_EPOCHS  = 3      # exclusion criterion (pre-registered)
+COMPLEXITY_COL = 'aperiodic'   # pre-registered proxy
 
 
 def find_first_n3_transition(stages, min_consecutive=3):
-    """First epoch of the first sustained Wake→N3 transition."""
+    """First epoch of first sustained Wake→N3 transition (≥3 consecutive N3)."""
     n = len(stages)
     for i in range(n - min_consecutive):
         if stages[i] < 3 and all(stages[i+j] == 3
@@ -61,7 +66,7 @@ def find_first_n3_transition(stages, min_consecutive=3):
     return None
 
 
-def compute_rolling_stats(values, window):
+def rolling_stats(values, window):
     s = pd.Series(values)
     return (s.rolling(window, center=True, min_periods=1).mean().values,
             s.rolling(window, center=True, min_periods=1).var().values)
@@ -69,210 +74,195 @@ def compute_rolling_stats(values, window):
 
 def analyse_subject(df_sub):
     df_sub = df_sub.dropna(subset=[COMPLEXITY_COL]).reset_index(drop=True)
-    if len(df_sub) < PRE_EPOCHS + POST_EPOCHS:
-        return None
+
+    n3_ep   = df_sub[df_sub.stage == 3][COMPLEXITY_COL]
+    wake_ep = df_sub[df_sub.stage == 0][COMPLEXITY_COL]
+
+    # Pre-registered exclusion criteria
+    if len(n3_ep) < MIN_N3_EPOCHS:
+        return None, 'fewer than 3 N3 epochs'
 
     transition_idx = find_first_n3_transition(df_sub['stage'].values)
     if transition_idx is None:
-        return None
+        return None, 'no sustained Wake→N3 transition'
 
-    # Analysis window
-    start    = max(0, transition_idx - PRE_EPOCHS)
-    end      = min(len(df_sub), transition_idx + POST_EPOCHS)
-    win      = df_sub.iloc[start:end].copy()
+    start = max(0, transition_idx - PRE_EPOCHS)
+    end   = min(len(df_sub), transition_idx + POST_EPOCHS)
+    win   = df_sub.iloc[start:end].copy()
     win['epoch_rel'] = np.arange(start, end) - transition_idx
 
-    rsi_proxy  = win[COMPLEXITY_COL].values
-    rel_pos    = win['epoch_rel'].values
-
-    # Per-subject N3 threshold: PE 75th percentile of N3 epochs
-    # (upper boundary of N3 = first level PE drops into from above)
-    n3_ep   = df_sub[df_sub.stage == 3][COMPLEXITY_COL]
-    wake_ep = df_sub[df_sub.stage == 0][COMPLEXITY_COL]
-    if len(n3_ep) < 5 or len(wake_ep) < 5:
-        return None
-
-    threshold = float(np.percentile(n3_ep, 75))
-
-    # Sanity check: Wake PE should be above threshold
-    if wake_ep.mean() < threshold:
-        # Wake and N3 PE are inverted for this subject — skip
-        print(f"    ⚠ Inverted Wake/N3 PE direction — subject skipped")
-        return None
-
-    roll_mean, roll_var = compute_rolling_stats(rsi_proxy, WINDOW_EPOCHS)
+    rsi_proxy = win[COMPLEXITY_COL].values
+    rel_pos   = win['epoch_rel'].values
 
     pre_mask = rel_pos < 0
-    if pre_mask.sum() < 5:
-        return None
+    if pre_mask.sum() < MIN_PRE_EPOCHS:
+        return None, 'fewer than 5 pre-transition epochs'
 
     pre_rel  = rel_pos[pre_mask]
-    pre_var  = roll_var[pre_mask]
+    roll_mean, roll_var = rolling_stats(rsi_proxy, WINDOW_EPOCHS)
     pre_mean = roll_mean[pre_mask]
+    pre_var  = roll_var[pre_mask]
 
-    # ── t_peak_var ────────────────────────────────────────────────────────────
-    t_peak_var = pre_rel[np.argmax(pre_var)]
+    # ── Pre-registered Step 4: threshold = 25th pctile of N3 aperiodic ───────
+    threshold = float(np.percentile(n3_ep, 25))
 
-    # ── t_cross_mean: first epoch mean DROPS BELOW threshold ─────────────────
-    # PE falls from Wake (~0.85) into N3 territory (below threshold ~0.62)
-    cross_idx = np.where(pre_mean <= threshold)[0]
-    if len(cross_idx) == 0:
-        # Mean never reached N3 level in pre-window — assign to post-window
-        all_cross = np.where(roll_mean <= threshold)[0]
-        t_cross_mean = rel_pos[all_cross[0]] if len(all_cross) else POST_EPOCHS
+    # ── Pre-registered Step 5: t_cross_mean ──────────────────────────────────
+    # Aperiodic slope RISES Wake→N3; mean first EXCEEDS (>=) 25th pctile of N3
+    cross_pre = np.where(pre_mean >= threshold)[0]
+    if len(cross_pre) == 0:
+        cross_all = np.where(roll_mean >= threshold)[0]
+        if len(cross_all) == 0:
+            return None, 'mean never reached N3 threshold'
+        t_cross_mean = int(rel_pos[cross_all[0]])
     else:
-        t_cross_mean = pre_rel[cross_idx[0]]
+        t_cross_mean = int(pre_rel[cross_pre[0]])
 
+    # ── Pre-registered Step 5: t_peak_var ────────────────────────────────────
+    t_peak_var = int(pre_rel[np.argmax(pre_var)])
+
+    # ── Pre-registered Step 6: lag ────────────────────────────────────────────
     lag_epochs  = t_cross_mean - t_peak_var
-    lag_seconds = lag_epochs * EPOCH_SEC
+    lag_seconds = float(lag_epochs * EPOCH_SEC)
 
-    # ── Power-law exponent β (H2) ─────────────────────────────────────────────
+    # ── H2 (exploratory): power-law β ────────────────────────────────────────
     t_to_thresh = t_cross_mean - pre_rel
     t_to_thresh = np.maximum(t_to_thresh, 0.5)
     beta_exp = np.nan
     if len(t_to_thresh) >= 5 and pre_var.max() > 0:
         try:
-            from scipy.stats import linregress
-            slope, *_ = linregress(np.log(t_to_thresh),
-                                   np.log(pre_var + 1e-30))
-            beta_exp = slope
+            slope, *_ = stats.linregress(np.log(t_to_thresh),
+                                         np.log(pre_var + 1e-30))
+            beta_exp = float(slope)
         except Exception:
             pass
 
-    # ── Variance-mean correlation (should be negative: var ↑ as mean ↓) ──────
     r_vm, p_vm = (np.nan, np.nan)
     if len(pre_mean) > 3:
         r_vm, p_vm = stats.pearsonr(pre_var, pre_mean)
 
     return {
         'transition_idx': transition_idx,
-        'window_start':   start,
-        'window_end':     end,
-        't_peak_var':     int(t_peak_var),
-        't_cross_mean':   int(t_cross_mean),
-        'lag_epochs':     int(lag_epochs),
-        'lag_seconds':    float(lag_seconds),
-        'threshold_used': float(threshold),
-        'n3_pe_mean':     float(n3_ep.mean()),
-        'wake_pe_mean':   float(wake_ep.mean()),
+        't_peak_var':     t_peak_var,
+        't_cross_mean':   t_cross_mean,
+        'lag_epochs':     lag_epochs,
+        'lag_seconds':    lag_seconds,
+        'threshold_used': threshold,
+        'n3_ap_mean':     float(n3_ep.mean()),
+        'wake_ap_mean':   float(wake_ep.mean()) if len(wake_ep) else np.nan,
         'r_var_mean':     float(r_vm),
         'p_var_mean':     float(p_vm),
-        'beta_exp':       float(beta_exp) if not np.isnan(beta_exp) else None,
+        'beta_exp':       beta_exp if not np.isnan(beta_exp) else None,
         'n_pre_epochs':   int(pre_mask.sum()),
         'n_n3_epochs':    int(len(n3_ep)),
         'rsi_time':       rel_pos.tolist(),
         'rsi_mean':       roll_mean.tolist(),
         'rsi_var':        roll_var.tolist(),
-    }
+    }, None
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
-complexity_files = sorted(glob.glob(os.path.join(COMPLEXITY_DIR, 'SC*_complexity.csv')))
-print(f'Found {len(complexity_files)} complexity files')
-print(f'Complexity measure: {COMPLEXITY_COL} (decreases Wake→N3 ✓)\n')
+files = sorted(glob.glob(os.path.join(COMPLEXITY_DIR, 'SC*_complexity.csv')))
+print(f'VPM Analysis — Study 1')
+print(f'Pre-registration: doi.org/10.17605/OSF.IO/X5ZPU')
+print(f'Complexity: {COMPLEXITY_COL} | Threshold: 25th pctile N3 | Direction: >=')
+print(f'Subjects found: {len(files)}\n')
 
-subject_results = []
+results, excluded = [], []
 
-for fpath in complexity_files:
+for fpath in files:
     sid    = os.path.basename(fpath).replace('_complexity.csv', '')
     df_sub = pd.read_csv(fpath)
 
-    # Sanity check PE direction
-    wake_pe = df_sub[df_sub.stage==0][COMPLEXITY_COL].mean()
-    n3_pe   = df_sub[df_sub.stage==3][COMPLEXITY_COL].mean()
-    direction = '✓' if wake_pe > n3_pe else '⚠ INVERTED'
+    wake_ap = df_sub[df_sub.stage==0][COMPLEXITY_COL].mean()
+    n3_ap   = df_sub[df_sub.stage==3][COMPLEXITY_COL].mean()
 
-    print(f'{sid}: Wake PE={wake_pe:.3f}  N3 PE={n3_pe:.3f}  {direction}', end='  ')
-
-    result = analyse_subject(df_sub)
+    result, reason = analyse_subject(df_sub)
     if result is None:
-        print('✗ no usable transition')
+        print(f'{sid}: EXCLUDED — {reason}')
+        excluded.append({'subject': sid, 'reason': reason})
         continue
 
     result['subject'] = sid
-    subject_results.append(result)
+    results.append(result)
 
-    lag_s = result['lag_seconds']
-    beta  = result['beta_exp']
-    vpm   = 'VPM ✓' if lag_s > 0 else ('tie' if lag_s == 0 else 'NOT VPM ✗')
-    beta_str = f'{beta:.3f}' if beta is not None else 'N/A'
-    print(f'lag={lag_s:+.0f}s  β={beta_str}  {vpm}')
+    lag_s  = result['lag_seconds']
+    vpm    = 'VPM ✓' if lag_s > 0 else ('tie' if lag_s == 0 else '✗')
+    beta   = result['beta_exp']
+    beta_s = f'{beta:.3f}' if beta is not None else 'N/A'
+    print(f'{sid}: Wake={wake_ap:.3f} N3={n3_ap:.3f} '
+          f'thresh={result["threshold_used"]:.3f} '
+          f't_peak={result["t_peak_var"]:+d} t_cross={result["t_cross_mean"]:+d} '
+          f'lag={lag_s:+.0f}s β={beta_s}  {vpm}')
 
-if not subject_results:
-    print('\nNo subjects had usable transitions.')
+if not results:
+    print('\nNo subjects passed exclusion criteria.')
     raise SystemExit(1)
 
-# ── Statistics ───────────────────────────────────────────────────────────────
+df_out = pd.DataFrame(results)
+df_out.to_csv(os.path.join(RESULTS_DIR, 'vpm_subject_results.csv'), index=False)
+if excluded:
+    pd.DataFrame(excluded).to_csv(
+        os.path.join(RESULTS_DIR, 'excluded_subjects.csv'), index=False)
 
-results_df = pd.DataFrame(subject_results)
-results_df.to_csv(os.path.join(RESULTS_DIR, 'vpm_subject_results.csv'), index=False)
-
-lags = results_df['lag_seconds'].dropna()
+lags = df_out['lag_seconds'].dropna()
 n    = len(lags)
 
 print(f'\n{"="*60}')
-print('VPM ANALYSIS — STUDY 1 RESULTS')
+print(f'STUDY 1 — PRE-REGISTERED RESULTS')
+print(f'Pre-registration: doi.org/10.17605/OSF.IO/X5ZPU')
 print(f'{"="*60}')
-print(f'N subjects with valid transitions: {n}')
-print(f'Complexity measure: {COMPLEXITY_COL}')
-print(f'\nLag statistics:')
-print(f'  Mean:     {lags.mean():+.1f}s ({lags.mean()/60:.1f} min)')
-print(f'  Median:   {lags.median():+.1f}s')
-print(f'  SD:       {lags.std():.1f}s')
-print(f'  Range:    [{lags.min():+.1f}, {lags.max():+.1f}]s')
+print(f'N included: {n}  |  N excluded: {len(excluded)}')
+print(f'\nLag (variance peak → mean threshold crossing):')
+print(f'  Mean:   {lags.mean():+.1f}s ({lags.mean()/60:.1f} min)')
+print(f'  Median: {lags.median():+.1f}s ({lags.median()/60:.1f} min)')
+print(f'  SD:     {lags.std():.1f}s')
+print(f'  Range:  [{lags.min():+.1f}, {lags.max():+.1f}]s')
 print(f'  VPM confirmed: {(lags>0).sum()}/{n} ({100*(lags>0).mean():.0f}%)')
 
-# H1
 stat, p_one = stats.wilcoxon(lags, alternative='greater')
 _, p_two    = stats.wilcoxon(lags, alternative='two-sided')
-z           = norm_dist.ppf(1 - p_one)
-r_eff       = z / np.sqrt(n)
+z = norm_dist.ppf(1-p_one)
+r = z / np.sqrt(n)
 
-print(f'\nH1 — Wilcoxon signed-rank (one-sided, lag > 0):')
+print(f'\nH1 (primary) — Wilcoxon signed-rank (one-sided, lag > 0):')
 print(f'  W = {stat:.0f}')
 print(f'  p = {p_one:.4f}')
-print(f'  r = {r_eff:.3f}')
+print(f'  r = {r:.3f}')
 print(f'  → {"CONFIRMED ✓" if p_one < 0.05 else "NOT CONFIRMED ✗"}')
 
-# H2
-betas = results_df['beta_exp'].dropna()
+betas = pd.Series([r['beta_exp'] for r in results
+                   if r['beta_exp'] is not None]).dropna()
+beta_mean = beta_sd = ci_lo = ci_hi = beta_p = np.nan
 if len(betas) >= 3:
     ci_lo = betas.mean() - 1.96*betas.std()/np.sqrt(len(betas))
     ci_hi = betas.mean() + 1.96*betas.std()/np.sqrt(len(betas))
-    t_b, p_b = stats.ttest_1samp(betas, 0.546)
-    print(f'\nH2 — Power-law exponent β:')
-    print(f'  Mean β = {betas.mean():.3f} ± {betas.std():.3f}')
+    t_b, beta_p = stats.ttest_1samp(betas, 0.546)
+    beta_mean, beta_sd = betas.mean(), betas.std()
+    print(f'\nH2 (exploratory) — Power-law β:')
+    print(f'  Mean β = {beta_mean:.3f} ± {beta_sd:.3f}')
     print(f'  95% CI = [{ci_lo:.3f}, {ci_hi:.3f}]')
-    print(f'  t vs 0.546: t={t_b:.2f}, p={p_b:.3f}')
-    pred_in_ci = ci_lo <= 0.546 <= ci_hi
-    print(f'  Predicted β=0.546 {"inside" if pred_in_ci else "outside"} 95% CI')
-    print(f'  → {"CONSISTENT ✓" if p_b > 0.05 else "DIFFERS ✗"} with HRIT prediction')
-else:
-    ci_lo = ci_hi = p_b = np.nan
-    betas_mean = betas_sd = np.nan
+    print(f'  t vs predicted 0.546: t={t_b:.2f}, p={beta_p:.3f}')
+    print(f'  β=0.546 {"inside" if ci_lo<=0.546<=ci_hi else "outside"} 95% CI '
+          f'→ {"CONSISTENT ✓" if beta_p > 0.05 else "DIFFERS ✗"}')
 
 summary = {
-    'n_subjects':          n,
-    'complexity_measure':  COMPLEXITY_COL,
-    'lag_mean_sec':        lags.mean(),
-    'lag_median_sec':      lags.median(),
-    'lag_sd_sec':          lags.std(),
-    'lag_mean_min':        lags.mean() / 60,
-    'pct_positive_lag':    100*(lags>0).mean(),
-    'n_positive_lag':      int((lags>0).sum()),
-    'wilcoxon_W':          stat,
-    'p_one_sided':         p_one,
-    'p_two_sided':         p_two,
-    'effect_r':            r_eff,
-    'beta_mean':           betas.mean() if len(betas) >= 3 else np.nan,
-    'beta_sd':             betas.std()  if len(betas) >= 3 else np.nan,
-    'beta_ci_lo':          ci_lo if len(betas) >= 3 else np.nan,
-    'beta_ci_hi':          ci_hi if len(betas) >= 3 else np.nan,
-    'beta_vs_predicted_p': p_b   if len(betas) >= 3 else np.nan,
+    'n_subjects': n, 'n_excluded': len(excluded),
+    'complexity_measure': COMPLEXITY_COL,
+    'threshold_definition': '25th_pctile_N3_aperiodic',
+    'crossing_direction': '>=',
+    'lag_mean_sec': lags.mean(), 'lag_mean_min': lags.mean()/60,
+    'lag_median_sec': lags.median(), 'lag_sd_sec': lags.std(),
+    'pct_positive_lag': 100*(lags>0).mean(),
+    'n_positive_lag': int((lags>0).sum()),
+    'wilcoxon_W': stat, 'p_one_sided': p_one,
+    'p_two_sided': p_two, 'effect_r': r,
+    'beta_mean': beta_mean, 'beta_sd': beta_sd,
+    'beta_ci_lo': ci_lo, 'beta_ci_hi': ci_hi,
+    'beta_vs_predicted_p': beta_p,
+    'preregistration_doi': '10.17605/OSF.IO/X5ZPU',
 }
 pd.DataFrame([summary]).to_csv(
     os.path.join(RESULTS_DIR, 'vpm_summary_stats.csv'), index=False)
-
-print(f'\nResults saved to: {RESULTS_DIR}/')
-print('Next step: run 04_figures.py')
+print(f'\nSaved → {RESULTS_DIR}/')
+print('Next: python 04_figures.py')
