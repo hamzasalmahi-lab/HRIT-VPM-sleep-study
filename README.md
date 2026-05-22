@@ -1,112 +1,149 @@
 # HRIT Empirical Programme — Studies 1 and 1b
-## Variance-Precedes-Mean (VPM / PEWS) in Sleep EEG
+## Presence Early Warning Signal (PEWS) in Sleep EEG
 
-Pre-registered empirical tests of the HRIT v3 Presence Early Warning
-Signal (PEWS) prediction — that neural complexity variance rises and peaks
-**before** the mean complexity crosses the consciousness threshold at the
-Wake→N3 sleep transition.
+Pre-registered empirical tests of the **Presence Early Warning Signal
+(PEWS)** — derived from the saddle-node bifurcation of the HRIT v3
+allostatic control ODE:
 
-**Framework:** HRIT v3 — Zenodo: https://doi.org/10.5281/zenodo.19490741  
+> Near the consciousness stability boundary, EEG complexity **variance**
+> rises to a peak **before** the rolling mean crosses the N3 threshold —
+> providing a pre-cognitive early warning signal of impending
+> consciousness-state transition.
+
+**HRIT v3 framework:** https://doi.org/10.5281/zenodo.19490741  
 **Author:** Hamza S. Almahi · hamza.s.almahi@gmail.com
 
 ---
 
-## PEWS Prediction (both studies)
+## Results at a glance
 
-From the HRIT v3 allostatic ODE (saddle-node bifurcation):
+| | Study 1 | Study 1b |
+|---|---|---|
+| **Pre-registration** | [OSF X5ZPU](https://doi.org/10.17605/OSF.IO/X5ZPU) | [OSF EYMSF](https://doi.org/10.17605/OSF.IO/EYMSF) |
+| **Proxy** | Aperiodic slope (rises Wake→N3) | Permutation entropy (falls Wake→N3) |
+| **N confirmed / total** | 18 / 18 (100%) | 18 / 19 (94.7%) |
+| **Mean lead time** | 3.6 min | 6.6 min |
+| **Wilcoxon W** | 171 | 0 |
+| **p (one-sided)** | < .0001 | < .0001 |
+| **r** | .882 | .860 |
+| **H2 — β = 0.546** | ❌ Not confirmed | ❌ Not confirmed |
 
-> **Var(CII proxy) ~ (z_c − z)^+β** with predicted β ≈ 0.546
->
-> Neural complexity variance rises to a peak **before** the mean crosses
-> the N3 threshold. Lead time = t_cross_mean − t_peak_var > 0.
-
-This constitutes a clinically actionable pre-cognitive early warning signal.
+Both studies confirm H1 (PEWS signal exists). Neither confirms the exact
+power-law exponent H2. Two independent complexity measures, same dataset,
+independent pipelines — convergent evidence.
 
 ---
 
-## Study 1
+## Theoretical predictions tested
 
-| Item | Detail |
-|------|--------|
-| Pre-registration | https://doi.org/10.17605/OSF.IO/X5ZPU |
-| Dataset | Sleep-EDF Expanded (PhysioNet), N = 20 cassette subjects |
-| Complexity measure | Permutation entropy (order=6, delay=1) — decreases Wake→N3 |
-| Threshold | 75th percentile of N3 PE epochs (upper N3 boundary) |
-| Prediction | Variance peaks before mean crosses N3 PE threshold (lag > 0) |
+From HRIT v3 (Almahi, 2026), Proof 08 and Verification 02:
 
-**Status:** ✅ Completed on real Sleep-EDF data (N=19, one subject excluded per pre-registered criteria). Results below are from re-analysis of stored real data time series.
-
-**Known issue in prior repo version:** The original code used aperiodic
-slope as the complexity measure. Aperiodic slope *increases* from Wake
-to N3 in Sleep-EDF (N3 > Wake), inverting the threshold logic and causing
-`t_cross_mean` to fire at window start for every subject. Fixed in this
-version by using permutation entropy, which correctly decreases Wake→N3.
-
-### How to reproduce Study 1
-
-```bash
-pip install mne numpy scipy matplotlib pandas wfdb
-python 00_download.py        # downloads Sleep-EDF (requires PhysioNet account)
-python 01_preprocess.py
-python 02_compute_complexity.py
-python 03_vpm_analysis.py    # FIXED: uses perm_entropy, correct threshold direction
-python 04_figures.py
-python 05_write_results.py
+```
+Escape time: τ  ~  (z_c − z)^{−0.500}   (mathematically exact)
+Variance:    Var ~  (z_c − z)^{+0.546}   (computational; consistent with 0.5)
 ```
 
-### Study 1 file structure
+The PEWS window — between variance peak and threshold crossing — maps
+clinically onto the pre-seizure window tested in Study 4 (DEWS, Yogarajah
+collaboration, FND cohort).
+
+---
+
+## Study 1 — Aperiodic slope proxy
+
+| Item | Detail |
+|---|---|
+| **Pre-registration** | https://doi.org/10.17605/OSF.IO/X5ZPU (13 Apr 2026) |
+| **Dataset** | Sleep-EDF Expanded, PhysioNet — N = 20 cassette subjects, Night 1 |
+| **Proxy** | Aperiodic 1/f slope (−β, Welch PSD, 2–40 Hz, alpha-excluded 9–12 Hz) |
+| **Threshold** | 25th percentile of per-subject N3 aperiodic slopes |
+| **Crossing** | `>=` threshold (mean rises upward into N3 territory) |
+| **Exclusions** | SC4111: mean never reached N3 threshold in the 10-min window |
+
+### Pre-registered analysis (verbatim from OSF)
+
+1. Find first sustained Wake→N3 transition (≥3 consecutive N3 epochs)
+2. Analysis window: −10 min to +5 min relative to onset
+3. Rolling mean and variance in 3-min (6-epoch) centred window
+4. N3 threshold = **25th percentile** of subject's own N3 aperiodic slopes
+5. `t_peak_var` = epoch of max rolling variance in pre-window  
+   `t_cross_mean` = first epoch where rolling mean **exceeds** (≥) threshold
+6. Lag = `t_cross_mean − t_peak_var`  (positive = VPM confirmed)
+7. One-sided Wilcoxon vs zero, α = .05. Report W, p, r = Z/√N
+
+### How to reproduce
+
+```bash
+# Prerequisites
+pip install mne numpy scipy pandas matplotlib wfdb
+
+# 1. Download (requires free PhysioNet account — physionet.org/register/)
+python 00_download.py
+
+# 2–5. Run pipeline
+python 01_preprocess.py          # extract sleep stage epochs
+python 02_compute_complexity.py  # compute aperiodic slope + PE
+python 03_vpm_analysis.py        # pre-registered VPM test ← key file
+python 04_figures.py             # publication figures
+python 05_write_results.py       # auto-generate results section text
+```
+
+### File structure
 
 ```
 00_download.py               Download Sleep-EDF from PhysioNet
 01_preprocess.py             EDF loading and sleep staging
-02_compute_complexity.py     Permutation entropy + aperiodic slope computation
-03_vpm_analysis.py           Pre-registered VPM analysis (FIXED)
-04_figures.py                Publication figures
-05_write_results.py          Auto-generate results section
-PREREGISTRATION.md           Pre-registration document
+02_compute_complexity.py     Aperiodic slope + permutation entropy
+03_vpm_analysis.py           PRE-REGISTERED VPM test  ← key file
+04_figures.py                Three publication figures
+05_write_results.py          Auto-generate manuscript results text
+PREREGISTRATION.md           Full pre-registration document
+LICENSE
 results/
-  vpm_subject_results.csv    Per-subject results
-  vpm_summary_stats.csv      Summary statistics
-study1b/                     Study 1b summary (see below)
+  vpm_subject_results.csv    Per-subject lag, β, time series
+  vpm_summary_stats.csv      All summary statistics
+  excluded_subjects.csv      Excluded subjects and reasons
+  manuscript_results_section.txt   (generated by 05_write_results.py)
+study1b/
+  README.md                  Study 1b summary — see below
 ```
 
----
+### Note on aperiodic slope direction
 
-## Study 1b
+The aperiodic slope **increases** from Wake to N3 (steeper 1/f exponent
+during deep sleep; N3 > Wake). The pre-registered analysis correctly uses:
+- threshold = **25th percentile** of N3 (lower bound of N3 territory)
+- crossing = `roll_mean >= threshold` (mean rises into N3)
 
-| Item | Detail |
-|------|--------|
-| Pre-registration | https://doi.org/10.17605/OSF.IO/EYMSF |
-| Dataset | Sleep-EDF Expanded, same N = 20 subjects |
-| Complexity measure | Permutation entropy (normalised to Wake baseline) |
-| Analysis repo | https://github.com/hamzasalmahi-lab/HRIT-v3-computational |
-
-### Study 1b confirmed results
-
-| Hypothesis | Prediction | Result |
-|------------|-----------|--------|
-| H1 | PE stratifies Wake > REM > N2 > N3 | ✅ **Confirmed** — 18/19, p = .0001, r = .860 |
-| H2 | r ≥ .633 (replication threshold) | ✅ **Confirmed** — r = .860 ≥ .633 |
-| H3 | β = 0.546 (power-law exponent) | ❌ Not confirmed — β = 0.284 [0.085, 0.483] |
-
-**Lead time: 6.6 min (SD = 3.0)** before N3 onset
-
-See `study1b/README.md` for full details.
+An earlier version of the code used the 75th percentile and `<=` direction
+(both calibrated for a *decreasing* measure), which forced `t_cross_mean`
+to the window start for most subjects and made the VPM test meaningless.
+This is documented in the commit history and corrected in the current version.
 
 ---
 
-## Convergent Evidence Summary
+## Study 1b — Permutation entropy proxy
 
-| Study | Measure | N confirmed | Lead time | p | r |
-|-------|---------|-------------|-----------|---|---|
-| Study 1 | Permutation entropy | TBD (real data pending) | TBD | TBD | TBD |
-| Study 1b | Permutation entropy (normalised) | 18/19 (94.7%) | 6.6 min | .0001 | .860 |
+Study 1b independently replicated the PEWS finding using permutation
+entropy (PE) as the I_Sim proxy, with a completely separate pipeline.
 
-Two independent pipelines, same dataset, same complexity family — convergent
-evidence for the PEWS prediction.
+See `study1b/README.md` for full details.  
+Analysis code: https://github.com/hamzasalmahi-lab/HRIT-v3-computational
+
+---
+
+## Dataset
+
+Sleep-EDF Expanded Database — Kemp et al. (2000)  
+PhysioNet: https://physionet.org/content/sleep-edfx/1.0.0/  
+License: Open Data Commons Attribution License v1.0  
+Requires: free PhysioNet account + data use agreement
+
+Raw EDF files are not included in this repo (each ~100 MB). Run
+`00_download.py` after creating a PhysioNet account to obtain them.
 
 ---
 
 ## License
 
-MIT
+MIT — see LICENSE

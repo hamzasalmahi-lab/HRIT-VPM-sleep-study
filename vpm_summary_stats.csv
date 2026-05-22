@@ -1,2 +1,0 @@
-n_subjects,lag_mean_sec,lag_median_sec,lag_sd_sec,pct_positive_lag,wilcoxon_W,p_one_sided,p_two_sided,effect_r,beta_mean,beta_sd,beta_vs_predicted_p
-19,-135.78947368421052,-90.0,141.90434138976568,0.0,0.0,0.9992923423213316,0.0014153153573368978,-0.7321824570318459,-6.483860735696591,,

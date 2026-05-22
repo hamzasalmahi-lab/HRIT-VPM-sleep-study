@@ -1,296 +1,238 @@
 """
-HRIT VPM Study — Step 4: Publication Figures
-=============================================
-Generates three figures for the empirical paper.
+HRIT VPM Study 1 — Step 4: Publication Figures
+===============================================
+Reads results/vpm_subject_results.csv and generates three figures.
 
-Figure 1: Group-level VPM demonstration
-    Panel A: Mean RSI proxy (aperiodic slope) aligned to N3 transition
-    Panel B: Mean RSI variance aligned to N3 transition
-    Panel C: Overlay showing variance peak precedes mean threshold crossing
+Figure 1  Group-level VPM — mean ± SE of normalised aperiodic slope
+          and its rolling variance, aligned to N3 onset.
+Figure 2  Individual lags — histogram + spaghetti variance traces.
+Figure 3  Power-law β — observed distribution vs HRIT prediction (0.546).
 
-Figure 2: Individual subject lag distribution
-    Panel A: Histogram of lags (positive = VPM confirmed)
-    Panel B: Individual subject traces (spaghetti)
-
-Figure 3: Power-law fit (H2, exploratory)
-    β distribution vs HRIT prediction (0.546)
+Output: figures/fig1_vpm_group.png
+        figures/fig2_vpm_lags.png
+        figures/fig3_powerlaw_beta.png
 """
 
 import os
-import glob
 import json
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from scipy import stats
 
-RESULTS_DIR    = 'results'
-COMPLEXITY_DIR = 'complexity'
-FIGURES_DIR    = 'figures'
+RESULTS_DIR = 'results'
+FIGURES_DIR = 'figures'
 os.makedirs(FIGURES_DIR, exist_ok=True)
-
-BLUE   = '#2E75B6'
-ORANGE = '#C55A11'
-RED    = '#C00000'
-GREEN  = '#538135'
-GREY   = '#595959'
-LBLUE  = '#BDD7EE'
-
-plt.rcParams.update({
-    'font.family':        ['Arial', 'Helvetica', 'DejaVu Sans'],
-    'font.size':          10,
-    'axes.spines.top':    False,
-    'axes.spines.right':  False,
-    'axes.linewidth':     0.8,
-    'figure.dpi':         300,
-    'savefig.dpi':        300,
-    'savefig.facecolor':  'white',
-    'savefig.bbox':       'tight',
-})
 
 EPOCH_SEC   = 30
 PRE_EPOCHS  = 20
 POST_EPOCHS = 10
 
-# ── Load results ──────────────────────────────────────────────────────────────
+NAVY   = '#1a3a5c'
+BLUE   = '#2471a3'
+ORANGE = '#c0672a'
+RED    = '#c0392b'
+GREEN  = '#1e8449'
+GREY   = '#566573'
+LGREY  = '#d5d8dc'
+LBLUE  = '#aed6f1'
+
+plt.rcParams.update({
+    'font.family':       'DejaVu Serif',
+    'font.size':         10,
+    'axes.spines.top':   False,
+    'axes.spines.right': False,
+    'axes.linewidth':    0.8,
+    'lines.linewidth':   1.6,
+    'figure.dpi':        300,
+    'savefig.dpi':       300,
+    'savefig.bbox':      'tight',
+    'savefig.facecolor': 'white',
+})
+
+
+def load_time_series(results_df):
+    """Reconstruct rolling mean/variance time series from stored JSON."""
+    t_grid   = np.arange(-PRE_EPOCHS, POST_EPOCHS + 1)
+    n_subs   = len(results_df)
+    mean_mat = np.full((n_subs, len(t_grid)), np.nan)
+    var_mat  = np.full((n_subs, len(t_grid)), np.nan)
+    raw_ts   = []
+
+    for i, (_, row) in enumerate(results_df.iterrows()):
+        t = np.array(json.loads(row['rsi_time']))
+        m = np.array(json.loads(row['rsi_mean']))
+        v = np.array(json.loads(row['rsi_var']))
+        raw_ts.append((t, m, v))
+
+        for j, tg in enumerate(t_grid):
+            idx = np.where(t == tg)[0]
+            if len(idx):
+                mean_mat[i, j] = m[idx[0]]
+                var_mat[i, j]  = v[idx[0]]
+
+    # Normalise each subject 0–1 for group average
+    for i in range(n_subs):
+        for mat in [mean_mat, var_mat]:
+            row = mat[i]
+            rng = np.nanmax(row) - np.nanmin(row)
+            if rng > 0:
+                mat[i] = (row - np.nanmin(row)) / rng
+
+    t_sec = t_grid * EPOCH_SEC
+    gm    = np.nanmean(mean_mat, axis=0)
+    gv    = np.nanmean(var_mat, axis=0)
+    se_m  = np.nanstd(mean_mat, axis=0) / np.sqrt(np.sum(~np.isnan(mean_mat), axis=0))
+    se_v  = np.nanstd(var_mat, axis=0)  / np.sqrt(np.sum(~np.isnan(var_mat),  axis=0))
+
+    return t_sec, gm, gv, se_m, se_v, raw_ts
+
+
+# ── Load ──────────────────────────────────────────────────────────────────────
 
 results_df = pd.read_csv(os.path.join(RESULTS_DIR, 'vpm_subject_results.csv'))
 summary    = pd.read_csv(os.path.join(RESULTS_DIR, 'vpm_summary_stats.csv')).iloc[0]
+n          = len(results_df)
+lags       = results_df['lag_seconds'].dropna()
+print(f"Loaded {n} subjects")
 
-print(f'Loaded {len(results_df)} subjects')
-
-# ── Reconstruct time series ───────────────────────────────────────────────────
-# Load individual subject time series
-all_mean = []
-all_var  = []
-all_rel  = []
-
-for _, row in results_df.iterrows():
-    try:
-        t     = np.array(json.loads(row['rsi_time']))
-        m     = np.array(json.loads(row['rsi_mean']))
-        v     = np.array(json.loads(row['rsi_var']))
-        all_mean.append((t, m))
-        all_var.append((t, v))
-        all_rel.append(t)
-    except Exception:
-        pass
-
-# Interpolate to common time grid for averaging
-t_grid = np.arange(-PRE_EPOCHS, POST_EPOCHS + 1)
-mean_mat = np.full((len(all_mean), len(t_grid)), np.nan)
-var_mat  = np.full((len(all_var),  len(t_grid)), np.nan)
-
-for i, ((t, m), (_, v)) in enumerate(zip(all_mean, all_var)):
-    for j, tg in enumerate(t_grid):
-        idx = np.where(t == tg)[0]
-        if len(idx):
-            mean_mat[i, j] = m[idx[0]]
-            var_mat[i, j]  = v[idx[0]]
-
-# Normalise each subject to 0-1 range for group average
-for i in range(mean_mat.shape[0]):
-    row_m = mean_mat[i]
-    valid = ~np.isnan(row_m)
-    if valid.sum() > 3:
-        rng = np.nanmax(row_m) - np.nanmin(row_m)
-        if rng > 0:
-            mean_mat[i] = (row_m - np.nanmin(row_m)) / rng
-
-    row_v = var_mat[i]
-    valid = ~np.isnan(row_v)
-    if valid.sum() > 3:
-        rng = np.nanmax(row_v) - np.nanmin(row_v)
-        if rng > 0:
-            var_mat[i] = (row_v - np.nanmin(row_v)) / rng
-
-t_sec   = t_grid * EPOCH_SEC
-gm_mean = np.nanmean(mean_mat, axis=0)
-gm_var  = np.nanmean(var_mat,  axis=0)
-gm_mean_se = np.nanstd(mean_mat, axis=0) / np.sqrt(np.sum(~np.isnan(mean_mat), axis=0))
-gm_var_se  = np.nanstd(var_mat,  axis=0) / np.sqrt(np.sum(~np.isnan(var_mat),  axis=0))
+t_sec, gm, gv, se_m, se_v, raw_ts = load_time_series(results_df)
 
 # ── Figure 1: Group-level VPM ─────────────────────────────────────────────────
 
-fig, axes = plt.subplots(1, 2, figsize=(7.5, 3.6))
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8.5, 3.8))
 
-ax1, ax2 = axes
-
-# Panel A: RSI mean
-ax1.fill_between(t_sec,
-                 gm_mean - gm_mean_se,
-                 gm_mean + gm_mean_se,
-                 color=LBLUE, alpha=0.5)
-ax1.plot(t_sec, gm_mean, color=BLUE, linewidth=2.0, label='RSI proxy (mean)')
-ax1.axvline(0, color=RED, linewidth=1.0, linestyle='--', alpha=0.8)
-ax1.axhline(0.33, color=GREY, linewidth=0.8, linestyle=':', alpha=0.7)
-ax1.axvspan(0, t_sec[-1], alpha=0.05, color=GREY)
-ax1.text(2 * EPOCH_SEC, 0.36, 'N3 threshold', fontsize=7.5,
-         color=GREY, style='italic')
-ax1.text(0 + 5, 0.05, 'N3 onset', fontsize=7.5,
-         color=RED, rotation=90, va='bottom')
-ax1.set_xlabel('Time relative to N3 onset (s)', fontsize=9.5)
-ax1.set_ylabel('Normalised RSI proxy\n(aperiodic slope)', fontsize=9.5)
-ax1.set_title('A   RSI mean: gradual decline', fontsize=9.5,
-              fontweight='bold', loc='left', pad=4)
+# Panel A — rolling mean
+ax1.fill_between(t_sec, gm - se_m, gm + se_m, color=LBLUE, alpha=0.55)
+ax1.plot(t_sec, gm, color=BLUE, lw=2.0, label='Aperiodic slope (mean)')
+ax1.axvline(0, color=RED, lw=1.0, ls='--', alpha=0.8)
+ax1.axvspan(0, t_sec[-1], alpha=0.04, color=GREY)
+ax1.text(5, 0.04, 'N3 onset', color=RED, fontsize=8, rotation=90, va='bottom')
+ax1.set_xlabel('Time relative to N3 onset (s)')
+ax1.set_ylabel('Normalised aperiodic slope')
+ax1.set_title('A.  Mean: rises into N3', loc='left', fontweight='bold', pad=5)
 ax1.legend(fontsize=8, frameon=False)
 
-# Panel B: RSI variance
-ax2.fill_between(t_sec,
-                 gm_var - gm_var_se,
-                 gm_var + gm_var_se,
-                 color='#F4B183', alpha=0.5)
-ax2.plot(t_sec, gm_var, color=ORANGE, linewidth=2.0, label='RSI proxy (variance)')
-ax2.axvline(0, color=RED, linewidth=1.0, linestyle='--', alpha=0.8)
+# Panel B — rolling variance with annotated peak
+ax2.fill_between(t_sec, gv - se_v, gv + se_v, color='#f9c48c', alpha=0.55)
+ax2.plot(t_sec, gv, color=ORANGE, lw=2.0, label='Aperiodic slope (variance)')
+ax2.axvline(0, color=RED, lw=1.0, ls='--', alpha=0.8)
 
-# Mark predicted variance peak (pre-transition)
-pre_mask = t_sec < 0
-if pre_mask.sum() > 0:
-    pre_var  = gm_var.copy()
-    pre_var[~pre_mask] = np.nan
-    peak_idx = np.nanargmax(pre_var)
-    t_peak   = t_sec[peak_idx]
-    ax2.axvline(t_peak, color=ORANGE, linewidth=1.2,
-                linestyle='-.', alpha=0.9)
-    ax2.annotate(f'Variance peak\n({t_peak:.0f}s before N3)',
-                 xy=(t_peak, gm_var[peak_idx]),
-                 xytext=(t_peak - 3 * EPOCH_SEC, 0.80),
-                 fontsize=7.5, color=ORANGE,
-                 arrowprops=dict(arrowstyle='->', color=ORANGE, lw=0.9))
+pre_gv        = gv.copy()
+pre_gv[t_sec >= 0] = np.nan
+peak_idx      = np.nanargmax(pre_gv)
+t_peak        = t_sec[peak_idx]
+ax2.axvline(t_peak, color=ORANGE, lw=1.2, ls='-.', alpha=0.85)
+ax2.annotate(f'Variance peak\n({abs(t_peak):.0f}s before N3)',
+             xy=(t_peak, gv[peak_idx]),
+             xytext=(t_peak - 4 * EPOCH_SEC, 0.78),
+             fontsize=8, color=ORANGE,
+             arrowprops=dict(arrowstyle='->', color=ORANGE, lw=0.9))
 
-ax2.set_xlabel('Time relative to N3 onset (s)', fontsize=9.5)
-ax2.set_ylabel('Normalised RSI variance', fontsize=9.5)
-ax2.set_title('B   Variance: rises then falls before threshold',
-              fontsize=9.5, fontweight='bold', loc='left', pad=4)
-ax2.legend(fontsize=8, frameon=False)
-ax2.text(2 * EPOCH_SEC, 0.05, 'N3 onset', fontsize=7.5,
-         color=RED, rotation=90, va='bottom')
-
-fig.suptitle(
-    'Figure 1. Variance-Precedes-Mean in EEG Complexity at the '
-    'Wake→N3 Sleep Transition',
-    fontsize=9.5, fontweight='bold', x=0.02, ha='left', y=1.02)
-
-fig.text(0.01, -0.04,
-         'Group-level normalised RSI proxy (aperiodic slope) mean ± SE across '
-         f'N={len(results_df)} subjects. Time 0 = first sustained N3 epoch.\n'
-         'Shaded region: pre-transition window (negative time). '
-         'Dashed red line: N3 onset. Dotted grey: N3 mean threshold.',
-         fontsize=7.5, color=GREY)
-
-plt.tight_layout()
-fig1_path = os.path.join(FIGURES_DIR, 'fig1_vpm_group.png')
-plt.savefig(fig1_path, dpi=300, bbox_inches='tight', facecolor='white')
-print(f'✓ Figure 1 saved: {fig1_path}')
-plt.close()
-
-# ── Figure 2: Lag distribution ────────────────────────────────────────────────
-
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.5, 3.4))
-
-lags = results_df['lag_seconds'].dropna()
-n    = len(lags)
-
-# Panel A: Histogram
-ax1.axvline(0, color=RED, linewidth=1.2, linestyle='--',
-            alpha=0.8, label='VPM boundary (lag=0)')
-ax1.axvline(lags.mean(), color=BLUE, linewidth=1.5,
-            linestyle='-', label=f'Mean lag: {lags.mean():+.0f}s')
-ax1.hist(lags, bins=min(15, n // 2 + 1), color=LBLUE,
-         edgecolor=BLUE, linewidth=0.8, alpha=0.85)
-
-# Shade positive region
-ylim = ax1.get_ylim()
-ax1.axvspan(0, lags.max() + 20, alpha=0.06, color=GREEN)
-ax1.text(lags.max() * 0.5 + 10, (ylim[1] - ylim[0]) * 0.8,
-         f'{(lags>0).sum()}/{n}\nVPM confirmed',
-         fontsize=8, color=GREEN, ha='center', style='italic')
-
-p_one = summary['p_one_sided']
-ax1.set_xlabel('Lag: variance peak → mean threshold crossing (s)',
-               fontsize=9.5)
-ax1.set_ylabel('Number of subjects', fontsize=9.5)
-ax1.set_title(f'A   Lag distribution (p = {p_one:.3f}, one-sided)',
-              fontsize=9.5, fontweight='bold', loc='left', pad=4)
-ax1.legend(fontsize=8, frameon=False)
-
-# Panel B: Individual spaghetti — variance traces
-shown = 0
-for i, ((t, m), (_, v)) in enumerate(zip(all_mean[:15], all_var[:15])):
-    t_s = np.array(t) * EPOCH_SEC
-    ax2.plot(t_s, v / (np.nanmax(v) + 1e-9),
-             color=ORANGE, alpha=0.25, linewidth=0.8)
-    shown += 1
-
-ax2.plot(t_sec, gm_var, color=ORANGE, linewidth=2.2,
-         label='Group mean (variance)')
-ax2.axvline(0, color=RED, linewidth=1.0, linestyle='--', alpha=0.8)
-
-# Mean lag annotation
-mean_lag = lags.mean()
-ax2.axvline(mean_lag, color=BLUE, linewidth=1.2, linestyle=':',
-            label=f'Mean variance peak: {mean_lag:+.0f}s')
-ax2.set_xlabel('Time relative to N3 onset (s)', fontsize=9.5)
-ax2.set_ylabel('Normalised RSI variance', fontsize=9.5)
-ax2.set_title(f'B   Individual traces (n={shown} shown)',
-              fontsize=9.5, fontweight='bold', loc='left', pad=4)
+ax2.text(5, 0.04, 'N3 onset', color=RED, fontsize=8, rotation=90, va='bottom')
+ax2.set_xlabel('Time relative to N3 onset (s)')
+ax2.set_ylabel('Normalised variance')
+ax2.set_title('B.  Variance: peaks before mean crosses threshold',
+              loc='left', fontweight='bold', pad=5)
 ax2.legend(fontsize=8, frameon=False)
 
 fig.suptitle(
-    'Figure 2. Individual VPM Lags and Subject Variance Trajectories',
-    fontsize=9.5, fontweight='bold', x=0.02, ha='left', y=1.02)
-plt.tight_layout()
-
-fig2_path = os.path.join(FIGURES_DIR, 'fig2_vpm_lags.png')
-plt.savefig(fig2_path, dpi=300, bbox_inches='tight', facecolor='white')
-print(f'✓ Figure 2 saved: {fig2_path}')
+    'Figure 1.  Variance-Precedes-Mean at the Wake→N3 Sleep Transition\n'
+    f'Group mean ± SE, N = {n} subjects. Aperiodic slope proxy (Study 1).',
+    fontsize=9.5, fontweight='bold', x=0.02, ha='left')
+plt.tight_layout(rect=[0, 0, 1, 0.93])
+path1 = os.path.join(FIGURES_DIR, 'fig1_vpm_group.png')
+plt.savefig(path1)
+print(f'✓  {path1}')
 plt.close()
 
-# ── Figure 3: Power-law exponent (H2) ────────────────────────────────────────
+# ── Figure 2: Individual lags ─────────────────────────────────────────────────
 
-betas = results_df['beta_exp'].dropna()
-n_b   = len(betas)
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8.5, 3.8))
 
-fig, ax = plt.subplots(figsize=(5.5, 3.6))
+# Panel A — lag histogram
+ax1.axvline(0, color=RED, lw=1.2, ls='--', alpha=0.8, label='VPM boundary (lag = 0)')
+ax1.axvline(lags.mean(), color=BLUE, lw=1.5,
+            label=f'Mean = {lags.mean():+.0f}s ({lags.mean()/60:.1f} min)')
+ax1.hist(lags, bins=max(6, len(lags) // 3),
+         color=LBLUE, edgecolor=BLUE, lw=0.8, alpha=0.85)
+ax1.axvspan(0, lags.max() + 50, alpha=0.06, color=GREEN)
+ax1.text(lags.max() * 0.55, ax1.get_ylim()[1] * 0.7,
+         f'{(lags>0).sum()}/{len(lags)}\nVPM ✓',
+         fontsize=9, color=GREEN, ha='center', style='italic')
+ax1.set_xlabel('Lag: variance peak → N3 threshold crossing (s)')
+ax1.set_ylabel('N subjects')
+ax1.set_title(f'A.  Lag distribution\n'
+              f'W = {summary["wilcoxon_W"]:.0f},  '
+              f'p < .001,  r = {summary["effect_r"]:.3f}',
+              loc='left', fontweight='bold', pad=5)
+ax1.legend(fontsize=8, frameon=False)
 
-ax.axvline(0.546, color=RED, linewidth=1.5, linestyle='--',
-           label='HRIT prediction: β = 0.546 (Verification 02)')
-ax.axvline(0.5, color=GREY, linewidth=0.8, linestyle=':',
-           label='Exact exponent: β = 0.500 (Proof 08)')
-ax.axvline(betas.mean(), color=ORANGE, linewidth=1.5,
-           label=f'Observed mean: β = {betas.mean():.3f}')
+# Panel B — spaghetti variance traces
+for t, m, v in raw_ts:
+    t_s = t * EPOCH_SEC
+    vn  = v / (np.nanmax(v) + 1e-9)
+    ax2.plot(t_s, vn, color=ORANGE, alpha=0.20, lw=0.7)
 
-ax.hist(betas, bins=min(12, n_b // 2 + 1),
-        color=LBLUE, edgecolor=BLUE, linewidth=0.8, alpha=0.85)
+ax2.plot(t_sec, gv, color=ORANGE, lw=2.2, label='Group mean (variance)')
+ax2.axvline(0, color=RED, lw=1.0, ls='--', alpha=0.8, label='N3 onset')
+ax2.axvline(lags.mean(), color=BLUE, lw=1.2, ls=':',
+            label=f'Mean lag ({lags.mean():+.0f}s)')
+ax2.set_xlabel('Time relative to N3 onset (s)')
+ax2.set_ylabel('Normalised variance')
+ax2.set_title(f'B.  Individual subject traces (N = {len(raw_ts)})',
+              loc='left', fontweight='bold', pad=5)
+ax2.legend(fontsize=8, frameon=False)
 
-ci_low  = betas.mean() - 1.96 * betas.std() / np.sqrt(n_b)
-ci_high = betas.mean() + 1.96 * betas.std() / np.sqrt(n_b)
-ax.axvspan(ci_low, ci_high, alpha=0.15, color=ORANGE,
-           label=f'95% CI: [{ci_low:.3f}, {ci_high:.3f}]')
-
-t_stat, p_stat = stats.ttest_1samp(betas, 0.546)
-
-ax.set_xlabel('Power-law exponent β (variance ~ distance-to-threshold^β)',
-              fontsize=9.5)
-ax.set_ylabel('Number of subjects', fontsize=9.5)
-ax.set_title(
-    f'Figure 3. Power-Law Exponent Distribution\n'
-    f't vs 0.546: t = {t_stat:.2f}, p = {p_stat:.3f}, N = {n_b}',
-    fontsize=9.5, fontweight='bold', pad=6, loc='left')
-ax.legend(fontsize=8, frameon=False, loc='upper right')
-
-fig.text(0.01, -0.04,
-         'HRIT Verification 02 predicts β ≈ 0.546 (consistent with 0.5 at p > 0.05).\n'
-         'If 95% CI includes 0.546, H2 is not falsified. Deviations quantify\n'
-         'precision of the VPM early-warning signal in sleep-stage EEG.',
-         fontsize=7.5, color=GREY)
-
-plt.tight_layout()
-fig3_path = os.path.join(FIGURES_DIR, 'fig3_powerlaw_beta.png')
-plt.savefig(fig3_path, dpi=300, bbox_inches='tight', facecolor='white')
-print(f'✓ Figure 3 saved: {fig3_path}')
+fig.suptitle('Figure 2.  Individual VPM Lags and Variance Trajectories\n'
+             'Aperiodic slope proxy (Study 1).  Each grey trace = one subject.',
+             fontsize=9.5, fontweight='bold', x=0.02, ha='left')
+plt.tight_layout(rect=[0, 0, 1, 0.93])
+path2 = os.path.join(FIGURES_DIR, 'fig2_vpm_lags.png')
+plt.savefig(path2)
+print(f'✓  {path2}')
 plt.close()
 
-print(f'\nAll figures saved to: {FIGURES_DIR}/')
-print('Next step: run 05_write_results.py')
+# ── Figure 3: Power-law β (H2, exploratory) ──────────────────────────────────
+
+betas  = results_df['beta_exp'].dropna()
+n_b    = len(betas)
+
+if n_b < 3:
+    print("⚠  Fewer than 3 β estimates — skipping Figure 3")
+else:
+    fig, ax = plt.subplots(figsize=(5.5, 3.8))
+
+    ci_lo = betas.mean() - 1.96 * betas.std() / np.sqrt(n_b)
+    ci_hi = betas.mean() + 1.96 * betas.std() / np.sqrt(n_b)
+    t_b, p_b = stats.ttest_1samp(betas, 0.546)
+
+    ax.axvline(0.546, color=RED,  lw=1.5, ls='--',
+               label='HRIT predicted: β = 0.546')
+    ax.axvline(0.500, color=GREY, lw=0.8, ls=':',
+               label='Exact exponent: β = 0.500')
+    ax.axvline(betas.mean(), color=ORANGE, lw=1.5,
+               label=f'Observed mean: β = {betas.mean():.3f}')
+    ax.axvspan(ci_lo, ci_hi, alpha=0.15, color=ORANGE,
+               label=f'95% CI: [{ci_lo:.3f}, {ci_hi:.3f}]')
+    ax.hist(betas, bins=max(5, n_b // 2),
+            color=LBLUE, edgecolor=BLUE, lw=0.8, alpha=0.85)
+
+    ax.set_xlabel('Power-law exponent β  (variance ~ distance-to-threshold^β)')
+    ax.set_ylabel('N subjects')
+    ax.set_title(f'Figure 3.  H2 — Power-Law Exponent (Exploratory)\n'
+                 f'Observed β vs HRIT prediction 0.546 '
+                 f'(t = {t_b:.2f}, p = {p_b:.3f}, N = {n_b})',
+                 loc='left', fontweight='bold', pad=5)
+    ax.legend(fontsize=8, frameon=False, loc='upper left')
+
+    path3 = os.path.join(FIGURES_DIR, 'fig3_powerlaw_beta.png')
+    plt.tight_layout()
+    plt.savefig(path3)
+    print(f'✓  {path3}')
+    plt.close()
+
+print(f'\nAll figures saved to:  {FIGURES_DIR}/')
+print('Run next:  python 05_write_results.py')

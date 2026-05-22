@@ -1,0 +1,79 @@
+RESULTS — STUDY 1
+=================
+Pre-registration: https://doi.org/10.17605/OSF.IO/X5ZPU
+Complexity proxy: Aperiodic 1/f slope (−β, Welch PSD, 2–40 Hz, alpha-excluded)
+N3 threshold:     25th percentile of per-subject N3 aperiodic slopes
+Dataset:          Sleep-EDF Expanded (PhysioNet), cassette study, Night 1
+
+Participants
+------------
+Of 19 subjects loaded, 18 yielded an identifiable sustained Wake-to-N3
+transition (≥3 consecutive N3 epochs following waking/light sleep). 1 subject
+was excluded per pre-specified criteria (mean aperiodic slope never reached the N3
+threshold within the 10-minute analysis window; SC4111).
+
+Primary Analysis — H1: Variance Precedes Mean
+----------------------------------------------
+The VPM prediction states that EEG complexity variance peaks before the mean
+crosses the N3 threshold. Temporal lags (t_cross_mean − t_peak_var) were positive
+in 100% of subjects (18/18;
+mean lag = +215.0 s, SD = 164.1 s,
+median = +120.0 s; range [+90.0, +660.0] s).
+
+A one-sided Wilcoxon signed-rank test confirmed lags were significantly greater
+than zero (W = 171, p < .001,
+r = 0.882): H1 CONFIRMED.
+
+The group-mean aperiodic slope (Figure 1) showed a characteristic profile:
+variance rose to its peak approximately 215 s
+(3.6 min) before the mean crossed the N3 threshold,
+then declined as mean complexity entered the N3 regime. This ordering was
+consistent across individual subjects (Figure 2).
+
+Exploratory Analysis — H2: Power-Law Exponent
+----------------------------------------------
+HRIT Verification 02 predicts variance scales with distance to threshold as
+Var ∝ (z_c − z)^β with β ≈ 0.546. The mean estimated exponent across subjects
+was β = -0.595 (SD = 0.633, N = 18;
+95% CI [-0.887, -0.302]). The predicted value of 0.546 was
+outside the 95% CI.
+One-sample t-test against 0.546: p < .001.
+H2: NOT CONFIRMED — β differs from predicted 0.546.
+
+Summary Statistics
+------------------
+| Measure                        | Value                        |
+|--------------------------------|------------------------------|
+| N (valid transitions)          | 18 |
+| N excluded                     | 1 |
+| VPM confirmed (lag > 0)        | 18/18 (100%)                   |
+| Mean lag                       | +215.0 s (3.6 min)              |
+| Median lag                     | +120.0 s                       |
+| SD lag                         | 164.1 s                        |
+| Wilcoxon W                     | 171 |
+| p (one-sided)                  | < .001 |
+| Effect size r                  | 0.882 |
+| Mean β (observed)              | -0.595 (SD = 0.633)            |
+| 95% CI for β                   | [-0.887, -0.302]                 |
+| HRIT predicted β               | 0.546                        |
+| p (β vs 0.546)                 | < .001 |
+
+Interpretation
+--------------
+H1 (primary):    CONFIRMED
+  — variance peaks before mean crosses N3 threshold (p < .001, r = 0.882)
+
+H2 (exploratory): NOT CONFIRMED
+  — power-law exponent β = -0.595 vs predicted 0.546
+
+Limitations
+-----------
+1. Single proxy: aperiodic slope approximates one dimension of the HRIT CII
+   (I_Sim). A full empirical test requires simultaneous HEP amplitude (I_Intero),
+   meta-d′/d′ (I_Prec), and PCI (I_Id).
+
+2. Transition type: sleep provides a depth-collapse signature. The primary
+   clinical target (DPDR onset) requires a separate design (Study 2).
+
+3. Threshold: estimated 25th percentile from stored 75th percentile and mean.
+   Run full pipeline on raw EDF files for exact pre-registered threshold values.
