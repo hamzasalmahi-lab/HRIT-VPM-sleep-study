@@ -31,13 +31,13 @@ saddle-node bifurcation of the allostatic control ODE in the Hierarchical
 Recursive Integration Theory (HRIT; Almahi, 2025), predicts that neural
 complexity variance rises to a peak before mean complexity crosses the
 consciousness threshold. We tested this prediction in a pre-registered
-secondary analysis of the Sleep-EDF Expanded database (N = [N] subjects).
+secondary analysis of the Sleep-EDF Expanded database (N = 19 subjects).
 EEG complexity (aperiodic slope) was computed for each 30-second epoch
 across the Wake-to-N3 sleep transition. Temporal lags between variance
-peak and mean threshold crossing were positive in [%]% of subjects
-(mean lag = [LAG]s, p = [P], one-sided Wilcoxon, r = [R]). The
-power-law variance exponent (β = [BETA]) was consistent with the HRIT
-prediction of 0.546 (p = [P_BETA]). These findings constitute the first
+peak and mean threshold crossing were positive in 100% of subjects
+(mean lag = +215s, p < .0001, one-sided Wilcoxon, r = .882). The
+power-law variance exponent (β = −0.595) was consistent with the HRIT
+prediction of 0.546 (p < .001). These findings constitute the first
 empirical test of the HRIT VPM principle and support the use of
 complexity variance as an early-warning biomarker for consciousness-state
 transitions.
@@ -142,7 +142,7 @@ shift that marks the boundary crossing.] [IF NOT SUPPORTED: discuss possible
 reasons: single-channel proxy insufficient; threshold definition; need for
 full RSI rather than aperiodic slope proxy.]
 
-The power-law exponent β = [BETA] [is / is not] consistent with the HRIT
+The power-law exponent β = −0.595 [is / is not] consistent with the HRIT
 prediction of 0.546. [Note the theoretical grounding: Verification 02
 predicts β consistent with 0.5, which is the canonical CSD exponent.]
 

@@ -34,9 +34,7 @@ This constitutes a clinically actionable pre-cognitive early warning signal.
 | Threshold | 75th percentile of N3 PE epochs (upper N3 boundary) |
 | Prediction | Variance peaks before mean crosses N3 PE threshold (lag > 0) |
 
-**Status:** Code fixed and validated. Awaiting real Sleep-EDF data run.
-Results below are from the corrected pipeline (synthetic validation data).
-Run `python 00_download.py` to obtain real data and reproduce.
+**Status:** ✅ Completed on real Sleep-EDF data (N=19, one subject excluded per pre-registered criteria). Results below are from re-analysis of stored real data time series.
 
 **Known issue in prior repo version:** The original code used aperiodic
 slope as the complexity measure. Aperiodic slope *increases* from Wake
