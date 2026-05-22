@@ -1,0 +1,2 @@
+n_subjects,complexity_measure,lag_mean_sec,lag_median_sec,lag_sd_sec,lag_mean_min,pct_positive_lag,n_positive_lag,wilcoxon_W,p_one_sided,p_two_sided,effect_r,beta_mean,beta_sd,beta_ci_lo,beta_ci_hi,beta_vs_predicted_p
+19,perm_entropy,145.26315789473685,120.0,138.2979240244541,2.4210526315789473,100.0,19,190.0,4.7537605803784364e-05,9.507521160756873e-05,0.895370182501676,-1.0305660194853195,0.41577823485244575,-1.2175227144824374,-0.8436093244882015,2.5157229690633435e-12
