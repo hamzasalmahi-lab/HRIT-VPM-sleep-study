@@ -25,7 +25,7 @@ Variance:     Var ~  (z_c − z)^{+0.546}   (Verification 02 — computational)
 | | **Study 1** | **Study 1b** |
 |---|---|---|
 | **Pre-registration** | [OSF/X5ZPU](https://doi.org/10.17605/OSF.IO/X5ZPU) | [OSF/EYMSF](https://doi.org/10.17605/OSF.IO/EYMSF) |
-| **Registered** | 13 Apr 2026 | prior to analysis |
+| **Registered** | 13 Apr 2026 | 9 May 2026 |
 | **Complexity proxy** | Aperiodic 1/f slope | Permutation entropy |
 | **Direction** | Rises Wake→N3 | Falls Wake→N3 |
 | **Dataset** | Sleep-EDF Expanded, N=19 | Sleep-EDF Expanded, N=19 |
